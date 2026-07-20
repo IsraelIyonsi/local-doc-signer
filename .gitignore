@@ -1,0 +1,15 @@
+# Private key material - never publish
+certs/
+*.p12
+*.pfx
+*.pem
+*.key
+
+# Signed documents, certificates of completion, and audit logs (personal data)
+output/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/

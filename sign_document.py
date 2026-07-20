@@ -1,0 +1,118 @@
+"""Command-line entry point for the local document signer.
+
+Examples:
+  python sign_document.py sign "C:/path/to/agreement.pdf" \
+      --name "Israel Iyonsi" --email israel@example.com \
+      --title "Director" --reason "I approve this document"
+
+  python sign_document.py verify "output/agreement-signed.pdf"
+"""
+from __future__ import annotations
+
+import argparse
+import getpass
+import sys
+from pathlib import Path
+
+from signer import audit, metadata, report, sign, verify
+from signer.identity import Signer
+
+DEFAULT_REASON = "I am the author and approve this document"
+
+
+def _resolve_password(supplied: str | None) -> str:
+    if supplied:
+        return supplied
+    return getpass.getpass("Key passphrase (protects your local certificate): ")
+
+
+def _cmd_sign(args: argparse.Namespace) -> int:
+    source = Path(args.document).expanduser().resolve()
+    if not source.exists():
+        print(f"File not found: {source}", file=sys.stderr)
+        return 1
+    if source.suffix.lower() != ".pdf":
+        print("Only PDF documents are supported.", file=sys.stderr)
+        return 1
+
+    password = _resolve_password(args.password)
+    signer = Signer(name=args.name, email=args.email, title=args.title or "")
+
+    from signer.identity import ensure_identity
+
+    pkcs12_path = ensure_identity(signer, password)
+    context = metadata.capture(source)
+    signed = sign.sign_pdf(
+        source=source,
+        pkcs12_path=pkcs12_path,
+        password=password,
+        signer=signer,
+        context=context,
+        reason=args.reason,
+        page_index=args.page,
+    )
+
+    entry = audit.record(signer, context, args.reason, signed.name, args.location)
+
+    results = verify.verify_pdf(signed)
+    intact = all(r.intact for r in results) if results else False
+    valid = all(r.valid for r in results) if results else False
+    cert = report.build_report(entry, intact, valid)
+
+    print(f"Signed PDF:   {signed}")
+    print(f"Certificate:  {cert}")
+    print(f"Audit log:    appended ({entry['signature_id']})")
+    print(f"Verification: intact={intact} valid={valid}")
+    return 0
+
+
+def _cmd_verify(args: argparse.Namespace) -> int:
+    target = Path(args.document).expanduser().resolve()
+    if not target.exists():
+        print(f"File not found: {target}", file=sys.stderr)
+        return 1
+    results = verify.verify_pdf(target)
+    if not results:
+        print("No digital signatures found in this document.")
+        return 1
+    for r in results:
+        print(f"Field:   {r.field_name}")
+        print(f"Signer:  {r.signer_name}")
+        print(f"Signed:  {r.signing_time}")
+        print(f"Intact:  {r.intact}")
+        print(f"Valid:   {r.valid}")
+        print(f"Covers whole document: {r.covers_whole_document}")
+        print("-" * 40)
+    return 0
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Sign PDFs locally with a real PKI signature.")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p_sign = sub.add_parser("sign", help="Sign a PDF document.")
+    p_sign.add_argument("document", help="Path to the PDF to sign.")
+    p_sign.add_argument("--name", required=True, help="Your full name.")
+    p_sign.add_argument("--email", required=True, help="Your email address.")
+    p_sign.add_argument("--title", default="", help="Your title (optional).")
+    p_sign.add_argument("--reason", default=DEFAULT_REASON, help="Reason for signing.")
+    p_sign.add_argument("--location", default="", help="Your true place of signing, recorded as self-declared (e.g. \"Lagos, Nigeria\").")
+    p_sign.add_argument("--password", default=None, help="Passphrase for your local key.")
+    p_sign.add_argument("--page", type=int, default=None, help="0-based page for the visible signature (default: last).")
+    p_sign.set_defaults(func=_cmd_sign)
+
+    p_verify = sub.add_parser("verify", help="Verify a signed PDF.")
+    p_verify.add_argument("document", help="Path to the signed PDF.")
+    p_verify.set_defaults(func=_cmd_verify)
+
+    return parser
+
+
+def main() -> int:
+    parser = _build_parser()
+    args = parser.parse_args()
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

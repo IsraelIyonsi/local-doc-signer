@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import logging
 import sys
 from pathlib import Path
 
@@ -18,6 +19,12 @@ from signer import audit, metadata, report, sign, verify
 from signer.identity import Signer
 
 DEFAULT_REASON = "I am the author and approve this document"
+_NOISY_LOGGERS = ("pyhanko", "pyhanko_certvalidator")
+
+
+def _quiet_library_logging() -> None:
+    for name in _NOISY_LOGGERS:
+        logging.getLogger(name).setLevel(logging.CRITICAL)
 
 
 def _resolve_password(supplied: str | None) -> str:
@@ -42,17 +49,34 @@ def _cmd_sign(args: argparse.Namespace) -> int:
 
     pkcs12_path = ensure_identity(signer, password)
     context = metadata.capture(source)
-    signed = sign.sign_pdf(
+    options = sign.SignOptions(
+        reason=args.reason,
+        page_index=args.page,
+        location=args.location,
+        timestamp_url=args.timestamp_url,
+        long_term=args.long_term,
+        certify=args.certify,
+    )
+    result = sign.sign_pdf(
         source=source,
         pkcs12_path=pkcs12_path,
         password=password,
         signer=signer,
         context=context,
-        reason=args.reason,
-        page_index=args.page,
+        options=options,
     )
+    signed = result.output_path
 
-    entry = audit.record(signer, context, args.reason, signed.name, args.location)
+    entry = audit.record(
+        signer,
+        context,
+        args.reason,
+        signed.name,
+        args.location,
+        timestamp_authority=result.timestamp_url or "",
+        long_term_validation=result.long_term,
+        certified=result.certified,
+    )
 
     results = verify.verify_pdf(signed)
     intact = all(r.intact for r in results) if results else False
@@ -62,6 +86,8 @@ def _cmd_sign(args: argparse.Namespace) -> int:
     print(f"Signed PDF:   {signed}")
     print(f"Certificate:  {cert}")
     print(f"Audit log:    appended ({entry['signature_id']})")
+    print(f"Timestamp:    {result.timestamp_url or 'none'}")
+    print(f"Long-term:    {result.long_term}")
     print(f"Verification: intact={intact} valid={valid}")
     return 0
 
@@ -82,6 +108,8 @@ def _cmd_verify(args: argparse.Namespace) -> int:
         print(f"Intact:  {r.intact}")
         print(f"Valid:   {r.valid}")
         print(f"Covers whole document: {r.covers_whole_document}")
+        print(f"Post-signing changes:  {r.modification_level} (benign only: {r.only_benign_updates})")
+        print(f"Trusted timestamp:     {r.has_trusted_timestamp}")
         print("-" * 40)
     return 0
 
@@ -99,6 +127,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p_sign.add_argument("--location", default="", help="Your true place of signing, recorded as self-declared (e.g. \"Lagos, Nigeria\").")
     p_sign.add_argument("--password", default=None, help="Passphrase for your local key.")
     p_sign.add_argument("--page", type=int, default=None, help="0-based page for the visible signature (default: last).")
+    p_sign.add_argument("--timestamp-url", dest="timestamp_url", default=None, help="RFC 3161 TSA URL for a trusted timestamp (e.g. http://timestamp.digicert.com).")
+    p_sign.add_argument("--long-term", dest="long_term", action="store_true", help="Embed LTV/DSS data (PAdES-LTA) so the signature validates long-term. Uses a default TSA if none given.")
+    p_sign.add_argument("--certify", action="store_true", help="Apply a certifying (author) signature with a DocMDP lock.")
     p_sign.set_defaults(func=_cmd_sign)
 
     p_verify = sub.add_parser("verify", help="Verify a signed PDF.")
@@ -109,6 +140,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    _quiet_library_logging()
     parser = _build_parser()
     args = parser.parse_args()
     return args.func(args)

@@ -13,6 +13,8 @@ _FIELDS = [
     ("Email", "signer_email"),
     ("Title", "signer_title"),
     ("Reason", "reason"),
+    ("Trusted timestamp (TSA)", "timestamp_authority"),
+    ("Long-term validation (LTV)", "long_term_validation"),
     ("Document", "document_name"),
     ("SHA-256 hash", "document_sha256"),
     ("Signed (UTC)", "timestamp_utc"),

@@ -45,9 +45,15 @@ def _cmd_sign(args: argparse.Namespace) -> int:
     password = _resolve_password(args.password)
     signer = Signer(name=args.name, email=args.email, title=args.title or "")
 
-    from signer.identity import ensure_identity
+    if args.pkcs12:
+        pkcs12_path = Path(args.pkcs12).expanduser().resolve()
+        if not pkcs12_path.exists():
+            print(f"Certificate file not found: {pkcs12_path}", file=sys.stderr)
+            return 1
+    else:
+        from signer.identity import ensure_identity
 
-    pkcs12_path = ensure_identity(signer, password)
+        pkcs12_path = ensure_identity(signer, password)
     context = metadata.capture(source)
     options = sign.SignOptions(
         reason=args.reason,
@@ -125,7 +131,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p_sign.add_argument("--title", default="", help="Your title (optional).")
     p_sign.add_argument("--reason", default=DEFAULT_REASON, help="Reason for signing.")
     p_sign.add_argument("--location", default="", help="Your true place of signing, recorded as self-declared (e.g. \"Lagos, Nigeria\").")
-    p_sign.add_argument("--password", default=None, help="Passphrase for your local key.")
+    p_sign.add_argument("--password", default=None, help="Passphrase for your key (local self-signed key, or the --pkcs12 file).")
+    p_sign.add_argument("--pkcs12", default=None, help="Path to your own PKCS#12 (.p12/.pfx) certificate, e.g. a purchased AATL document-signing cert. Overrides the self-signed identity; --password is its passphrase.")
     p_sign.add_argument("--page", type=int, default=None, help="0-based page for the visible signature (default: last).")
     p_sign.add_argument("--timestamp-url", dest="timestamp_url", default=None, help="RFC 3161 TSA URL for a trusted timestamp (e.g. http://timestamp.digicert.com).")
     p_sign.add_argument("--long-term", dest="long_term", action="store_true", help="Embed LTV/DSS data (PAdES-LTA) so the signature validates long-term. Uses a default TSA if none given.")

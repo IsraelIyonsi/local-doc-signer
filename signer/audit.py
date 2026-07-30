@@ -16,6 +16,9 @@ def record(
     reason: str,
     output_name: str,
     declared_location: str = config.NOT_DECLARED,
+    timestamp_authority: str = config.NOT_DECLARED,
+    long_term_validation: bool = False,
+    certified: bool = False,
 ) -> dict:
     entry = {
         "event": "document_signed",
@@ -24,6 +27,9 @@ def record(
         "signer_title": signer.title,
         "reason": reason,
         "declared_location": declared_location or config.NOT_DECLARED,
+        "timestamp_authority": timestamp_authority or config.NOT_DECLARED,
+        "long_term_validation": long_term_validation,
+        "certified": certified,
         "signed_output": output_name,
         **context.as_dict(),
     }

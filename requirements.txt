@@ -1,0 +1,4 @@
+pyhanko>=0.35
+pyhanko-certvalidator>=0.26
+cryptography>=44
+requests>=2.31

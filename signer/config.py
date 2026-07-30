@@ -24,5 +24,9 @@ NOT_DECLARED = "not declared"
 SIGNATURE_FIELD_NAME = "Signature"
 SIGNED_SUFFIX = "-signed"
 
+DEFAULT_TSA_URL = "http://timestamp.sectigo.com"
+REVOCATION_MODE = "soft-fail"
+MD_ALGORITHM = "sha256"
+
 for _directory in (CERTS_DIR, OUTPUT_DIR, REPORTS_DIR):
     _directory.mkdir(parents=True, exist_ok=True)

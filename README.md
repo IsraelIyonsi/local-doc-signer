@@ -55,6 +55,41 @@ Optional flags for `sign`:
 - `--location "Lagos, Nigeria"`  your true place of signing. Recorded in a
   separate field labelled "self-declared" so it is never presented as a
   system-detected value. The IP-derived location is still captured alongside it.
+- `--timestamp-url URL`  attach a trusted RFC 3161 timestamp from a Time Stamp
+  Authority (for example `http://timestamp.sectigo.com`). Proves the signing
+  time independently of the machine clock.
+- `--long-term`  embed long-term validation data (LTV/DSS, i.e. PAdES-LTA) so
+  the signature still verifies years later after certificates expire. Uses a
+  default TSA if `--timestamp-url` is not given. This produces the same
+  multi-revision structure a DocuSign document has. If the chosen TSA's chain
+  cannot be validated, it falls back to a plain trusted-timestamp signature.
+- `--certify`  apply a certifying (author) signature with a DocMDP lock.
+
+- `--pkcs12 PATH`  sign with your own certificate (a `.p12`/`.pfx` file) instead
+  of the auto-generated self-signed one. `--password` is that file's passphrase.
+
+### Reaching DocuSign-level quality
+
+`--long-term` gets the tool to PAdES-LTA: a real digital signature, a trusted
+timestamp, and embedded long-term validation data. That is the same standard a
+DocuSign document uses. The one remaining difference is trust anchoring: the
+auto-generated certificate is self-signed, so verifiers trust it by trusting
+your certificate directly.
+
+For the automatic green check that strangers see, buy a document-signing
+certificate from a CA in Adobe's Approved Trust List (AATL) and point the tool
+at it:
+
+    python sign_document.py sign "document.pdf" ^
+        --name "Israel Iyonsi" --email you@example.com ^
+        --pkcs12 "C:/path/to/your-aatl-cert.p12" --password "cert-passphrase" ^
+        --long-term
+
+With a real AATL certificate plus `--long-term`, the output is equivalent to a
+DocuSign-signed document: trusted issuer, trusted timestamp, and long-term
+validation, all under your own identity. The signing standard is already
+equivalent with the self-signed cert; the certificate is only what makes third
+parties trust it automatically.
 
 ## Output
 
